@@ -9,6 +9,11 @@ struct LocSimView: View {
     @State private var mapTarget: EquatableCoordinate?
     @State private var isSimulating = false
     @State private var showError = false
+    @StateObject private var bookmarks = BookmarkStore()
+    @State private var showBookmarks = false
+    @State private var showSavePlace = false
+    @State private var bookmarkName = ""
+    @State private var showMissingCoordinate = false
 
     var body: some View {
         NavigationView {
@@ -42,12 +47,22 @@ struct LocSimView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(isSimulating ? .green : .red)
                     .controlSize(.large)
+                    HStack(spacing: 12) {
+                        Button { bookmarkName = ""; showSavePlace = true } label: {
+                            Label("Lưu vị trí", systemImage: "bookmark.badge.plus")
+                        }
+                        Button { showBookmarks = true } label: {
+                            Label("Đã lưu", systemImage: "bookmark.fill")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
                 }.padding(.horizontal)
                 CustomMapView(tappedCoordinate: $tappedCoordinate, targetCoordinate: $mapTarget)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 HStack {
-                    Text("Version 1.0.0")
+                    Text("Version 1.1.0")
                         .foregroundColor(.secondary)
                     Spacer()
                     Button(role: .destructive, action: stopSimulation) {
@@ -68,12 +83,51 @@ struct LocSimView: View {
                 coordinates = String(format: "%.7f,%.7f", point.latitude, point.longitude)
                 simulate(point)
             }
+            .sheet(isPresented: $showBookmarks) {
+                SavedPlacesView(store: bookmarks, select: selectSavedPlace)
+            }
+            .alert("Lưu vị trí", isPresented: $showSavePlace) {
+                TextField("Tên địa điểm", text: $bookmarkName)
+                Button("Hủy", role: .cancel) {}
+                Button("Lưu") { saveCurrentPlace() }
+            } message: {
+                Text("Đặt tên cho tọa độ hiện đang chọn trên bản đồ.")
+            }
+            .alert("Chưa có tọa độ hợp lệ", isPresented: $showMissingCoordinate) {
+                Button("Đóng", role: .cancel) {}
+            } message: {
+                Text("Hãy chọn điểm trên bản đồ hoặc nhập tọa độ trước khi lưu.")
+            }
             .alert("Tọa độ không hợp lệ", isPresented: $showError) {
                 Button("Đóng", role: .cancel) {}
             } message: {
                 Text("Nhập theo dạng vĩ độ,kinh độ. Ví dụ: 21.5595306,105.2776417")
             }
         }.navigationViewStyle(.stack)
+    }
+
+    private func parsedCoordinates() -> CLLocationCoordinate2D? {
+        let parts = coordinates.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let latitude = Double(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
+              let longitude = Double(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)),
+              latitude.isFinite, longitude.isFinite,
+              (-90.0...90.0).contains(latitude), (-180.0...180.0).contains(longitude) else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private func saveCurrentPlace() {
+        guard let point = parsedCoordinates() else { showMissingCoordinate = true; return }
+        let name = bookmarkName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        bookmarks.add(name: name, coordinate: point, altitude: Double(altitude) ?? 0)
+    }
+
+    private func selectSavedPlace(_ place: SavedPlace) {
+        coordinates = place.coordinateText
+        altitude = String(format: "%g", place.altitude)
+        mapTarget = EquatableCoordinate(coordinate: place.coordinate)
+        // Selecting a bookmark only navigates the map. Tap Chạy to simulate GPS.
     }
 
     private func applyCoordinates() {
