@@ -60,11 +60,13 @@ struct LocSimView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: tappedCoordinate) { selected in
                 guard let selected = selected else { return }
-                let fixed = CoordTransform.gcj02ToWgs84(selected.coordinate)
-                coordinates = String(format: "%.7f,%.7f", fixed.latitude, fixed.longitude)
-                // Đồng bộ trạng thái ghim với lựa chọn vừa chạm/nhấn giữ.
-                mapTarget = EquatableCoordinate(coordinate: selected.coordinate)
-                simulate(fixed)
+                // MKMapView provides CLLocationCoordinate2D. Use this exact coordinate
+                // for the input and the simulated GPS, so the map pin and GPS agree.
+                // Do not update mapTarget: that would move the camera after a manual tap
+                // and can also trigger a zoom/camera jump in updateUIView.
+                let point = selected.coordinate
+                coordinates = String(format: "%.7f,%.7f", point.latitude, point.longitude)
+                simulate(point)
             }
             .alert("Tọa độ không hợp lệ", isPresented: $showError) {
                 Button("Đóng", role: .cancel) {}
