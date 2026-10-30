@@ -8,7 +8,6 @@ struct LocSimView: View {
     @State private var tappedCoordinate: EquatableCoordinate?
     @State private var mapTarget: EquatableCoordinate?
     @State private var isSimulating = false
-    @State private var message = "Chọn trên bản đồ hoặc nhập tọa độ"
     @State private var showError = false
 
     var body: some View {
@@ -37,20 +36,18 @@ struct LocSimView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     Button(action: applyCoordinates) {
-                        Label("Đến vị trí và mô phỏng", systemImage: "location.fill")
+                        Label("Chạy", systemImage: "location.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(isSimulating ? .green : .red)
                     .controlSize(.large)
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundColor(isSimulating ? .green : .secondary)
                 }.padding(.horizontal)
                 CustomMapView(tappedCoordinate: $tappedCoordinate, targetCoordinate: $mapTarget)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 HStack {
-                    Text(isSimulating ? "Đang mô phỏng" : "Chưa mô phỏng")
+                    Text("Version 1.0.0")
                         .foregroundColor(.secondary)
                     Spacer()
                     Button(role: .destructive, action: stopSimulation) {
@@ -59,7 +56,7 @@ struct LocSimView: View {
                 }.padding([.horizontal, .bottom])
             }
             .padding(.top, 10)
-            .navigationTitle("LocSim")
+            .navigationTitle("TNG Location")
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: tappedCoordinate) { selected in
                 guard let selected = selected else { return }
@@ -98,12 +95,10 @@ struct LocSimView: View {
                                   horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date())
         LocSimManager.startLocSim(location: location)
         isSimulating = true
-        message = "Đã gửi lệnh mô phỏng. Kiểm tra trong Apple Maps hoặc Google Maps."
     }
 
     private func stopSimulation() {
         LocSimManager.stopLocSim()
         isSimulating = false
-        message = "Đã gửi lệnh dừng mô phỏng"
     }
 }
