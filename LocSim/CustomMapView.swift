@@ -38,9 +38,19 @@ struct CustomMapView: UIViewRepresentable {
         guard let target = targetCoordinate?.coordinate else { return }
         if let previous = context.coordinator.previousTarget,
            previous.latitude == target.latitude && previous.longitude == target.longitude { return }
+        let isFirstTarget = context.coordinator.previousTarget == nil
         context.coordinator.previousTarget = target
-        uiView.setRegion(MKCoordinateRegion(center: target,
-                          span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)), animated: true)
+        // Only initialize zoom on the first target. For all subsequent targets,
+        // recenter WITHOUT changing the user's current zoom level.
+        // Calling setRegion with a hardcoded span on every selection caused zoom-out.
+        if isFirstTarget {
+            uiView.setRegion(MKCoordinateRegion(center: target,
+                              span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)), animated: false)
+        } else {
+            // A point picked on the map is already within the visible region;
+            // do not move the camera. For typed coordinates, move its center only.
+            uiView.setCenter(target, animated: true)
+        }
         uiView.removeAnnotations(uiView.annotations.filter { !($0 is MKUserLocation) })
         let pin = MKPointAnnotation()
         pin.coordinate = target
