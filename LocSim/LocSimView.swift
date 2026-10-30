@@ -12,7 +12,6 @@ struct LocSimView: View {
     @StateObject private var bookmarks = BookmarkStore()
     @State private var showBookmarks = false
     @State private var showSavePlace = false
-    @State private var bookmarkName = ""
     @State private var showMissingCoordinate = false
 
     var body: some View {
@@ -48,7 +47,10 @@ struct LocSimView: View {
                     .tint(isSimulating ? .green : .red)
                     .controlSize(.large)
                     HStack(spacing: 12) {
-                        Button { bookmarkName = ""; showSavePlace = true } label: {
+                        Button {
+                            if parsedCoordinates() == nil { showMissingCoordinate = true }
+                            else { showSavePlace = true }
+                        } label: {
                             Label("Lưu vị trí", systemImage: "bookmark.badge.plus")
                         }
                         Button { showBookmarks = true } label: {
@@ -62,7 +64,7 @@ struct LocSimView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 HStack {
-                    Text("Version 1.1.0")
+                    Text("Version 1.1.1")
                         .foregroundColor(.secondary)
                     Spacer()
                     Button(role: .destructive, action: stopSimulation) {
@@ -86,12 +88,12 @@ struct LocSimView: View {
             .sheet(isPresented: $showBookmarks) {
                 SavedPlacesView(store: bookmarks, select: selectSavedPlace)
             }
-            .alert("Lưu vị trí", isPresented: $showSavePlace) {
-                TextField("Tên địa điểm", text: $bookmarkName)
-                Button("Hủy", role: .cancel) {}
-                Button("Lưu") { saveCurrentPlace() }
-            } message: {
-                Text("Đặt tên cho tọa độ hiện đang chọn trên bản đồ.")
+            .sheet(isPresented: $showSavePlace) {
+                if let point = parsedCoordinates() {
+                    SavePlaceSheet(coordinate: point, altitude: Double(altitude) ?? 0) { name, savedPoint, savedAltitude in
+                        bookmarks.add(name: name, coordinate: savedPoint, altitude: savedAltitude)
+                    }
+                }
             }
             .alert("Chưa có tọa độ hợp lệ", isPresented: $showMissingCoordinate) {
                 Button("Đóng", role: .cancel) {}
@@ -114,13 +116,6 @@ struct LocSimView: View {
               latitude.isFinite, longitude.isFinite,
               (-90.0...90.0).contains(latitude), (-180.0...180.0).contains(longitude) else { return nil }
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }
-
-    private func saveCurrentPlace() {
-        guard let point = parsedCoordinates() else { showMissingCoordinate = true; return }
-        let name = bookmarkName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        bookmarks.add(name: name, coordinate: point, altitude: Double(altitude) ?? 0)
     }
 
     private func selectSavedPlace(_ place: SavedPlace) {
