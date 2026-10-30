@@ -13,6 +13,7 @@ struct LocSimView: View {
     @State private var showBookmarks = false
     @State private var showSavePlace = false
     @State private var showMissingCoordinate = false
+    @State private var showDisclaimer = false
 
     var body: some View {
         NavigationView {
@@ -40,7 +41,7 @@ struct LocSimView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     Button(action: applyCoordinates) {
-                        Label("Chạy", systemImage: "location.fill")
+                        Label(isSimulating ? "Đang chạy" : "Đã dừng", systemImage: isSimulating ? "location.fill" : "location.slash")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -64,7 +65,7 @@ struct LocSimView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 HStack {
-                    Text("Version 1.1.1")
+                    Text("Version 1.2.0")
                         .foregroundColor(.secondary)
                     Spacer()
                     Button(role: .destructive, action: stopSimulation) {
@@ -74,6 +75,23 @@ struct LocSimView: View {
             }
             .padding(.top, 10)
             .navigationTitle("TNG Location")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        Button {
+                            showDisclaimer = true
+                        } label: {
+                            Label("Giới thiệu & Miễn trừ trách nhiệm", systemImage: "info.circle")
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .accessibilityLabel("Menu")
+                    }
+                }
+            }
+            .sheet(isPresented: $showDisclaimer) {
+                DisclaimerView()
+            }
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: tappedCoordinate) { selected in
                 guard let selected = selected else { return }
@@ -122,7 +140,9 @@ struct LocSimView: View {
         coordinates = place.coordinateText
         altitude = String(format: "%g", place.altitude)
         mapTarget = EquatableCoordinate(coordinate: place.coordinate)
-        // Selecting a bookmark only navigates the map. Tap Chạy to simulate GPS.
+        // One tap on a bookmark selects the location AND starts simulation.
+        // Preserve map behavior: targetCoordinate only changes for saved coordinates.
+        simulate(place.coordinate)
     }
 
     private func applyCoordinates() {
@@ -151,5 +171,39 @@ struct LocSimView: View {
     private func stopSimulation() {
         LocSimManager.stopLocSim()
         isSimulating = false
+    }
+}
+
+
+private struct DisclaimerView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Giới thiệu")
+                        .font(.title2).bold()
+                    Text("LoTNG là công cụ thử nghiệm mô phỏng vị trí dành cho mục đích nghiên cứu, học tập, phát triển và kiểm tra ứng dụng trên thiết bị do người dùng quản lý.")
+                    Text("Miễn trừ trách nhiệm")
+                        .font(.title2).bold()
+                    Text("Người dùng tự chịu trách nhiệm về việc lựa chọn vị trí, cách sử dụng và việc tuân thủ pháp luật cũng như điều khoản của các dịch vụ liên quan. Không sử dụng ứng dụng để giả mạo nhằm lừa đảo, xâm phạm quyền riêng tư, né tránh các biện pháp bảo vệ hay gây thiệt hại cho người khác.")
+                    Text("Ứng dụng được cung cấp theo hiện trạng, không bảo đảm phù hợp với mọi thiết bị hoặc dịch vụ. Hãy chỉ thử nghiệm khi được phép và không dùng vị trí giả lập trong những tình huống liên quan đến an toàn, khẩn cấp hay cần xác định vị trí chính xác.")
+                    Text("Version 1.2.0")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            .navigationTitle("Thông tin ứng dụng")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
     }
 }
