@@ -1,0 +1,42 @@
+name: Build LocSim Standalone TIPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen and ldid
+        run: brew install xcodegen ldid
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+      - name: Build LocSim
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project LocSimIndependent.xcodeproj -scheme LocSimIndependent \
+            -configuration Release -derivedDataPath "$RUNNER_TEMP/LocSimDerived" \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+      - name: Sign and package TIPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/LocSimDerived/Build/Products/Release-iphoneos/LocSimIndependent.app"
+          test -f "$APP/LocSimIndependent"
+          mkdir -p output/Payload
+          cp -R "$APP" output/Payload/LocSimIndependent.app
+          ldid -S"$PWD/entitlements.plist" output/Payload/LocSimIndependent.app/LocSimIndependent
+          ldid -e output/Payload/LocSimIndependent.app/LocSimIndependent > output/verified-entitlements.plist
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.locationd.simulation' output/verified-entitlements.plist
+          cd output
+          zip -qry LocSimIndependent-TrollStore.tipa Payload
+          unzip -tq LocSimIndependent-TrollStore.tipa
+      - name: Upload TIPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocSimIndependent-TrollStore
+          path: output/LocSimIndependent-TrollStore.tipa
+          if-no-files-found: error
