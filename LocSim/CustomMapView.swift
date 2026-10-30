@@ -71,6 +71,10 @@ struct CustomMapView: UIViewRepresentable {
 
         private func selectCoordinate(at point: CGPoint, on mapView: MKMapView) {
             let selected = mapView.convert(point, toCoordinateFrom: mapView)
+            // Mark this selection as already handled before the SwiftUI binding update.
+            // updateUIView must NOT call setRegion for a point picked on the map,
+            // otherwise the zoom snaps back to the fixed default span.
+            previousTarget = selected
             // Đặt ghim ngay khi chạm, không phụ thuộc vào lệnh mô phỏng GPS.
             mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
             let pin = MKPointAnnotation()
