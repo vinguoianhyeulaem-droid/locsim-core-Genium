@@ -65,6 +65,8 @@ struct LocSimView: View {
                 guard let selected = selected else { return }
                 let fixed = CoordTransform.gcj02ToWgs84(selected.coordinate)
                 coordinates = String(format: "%.7f,%.7f", fixed.latitude, fixed.longitude)
+                // Đồng bộ trạng thái ghim với lựa chọn vừa chạm/nhấn giữ.
+                mapTarget = EquatableCoordinate(coordinate: selected.coordinate)
                 simulate(fixed)
             }
             .alert("Tọa độ không hợp lệ", isPresented: $showError) {

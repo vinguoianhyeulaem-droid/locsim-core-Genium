@@ -21,6 +21,15 @@ struct CustomMapView: UIViewRepresentable {
 
         let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         mapView.addGestureRecognizer(tapRecognizer)
+
+        // Nhấn giữ để chọn vị trí; không cho tap nhận cùng một lần nhấn giữ.
+        let longPressRecognizer = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPressRecognizer.minimumPressDuration = 0.45
+        tapRecognizer.require(toFail: longPressRecognizer)
+        mapView.addGestureRecognizer(longPressRecognizer)
         return mapView
     }
 
@@ -51,10 +60,23 @@ struct CustomMapView: UIViewRepresentable {
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
-            let mapView = gesture.view as! MKMapView
-            let touchPoint = gesture.location(in: mapView)
-            let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
-            parent.tappedCoordinate = EquatableCoordinate(coordinate: coordinate)
+            guard gesture.state == .ended, let mapView = gesture.view as? MKMapView else { return }
+            selectCoordinate(at: gesture.location(in: mapView), on: mapView)
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let mapView = gesture.view as? MKMapView else { return }
+            selectCoordinate(at: gesture.location(in: mapView), on: mapView)
+        }
+
+        private func selectCoordinate(at point: CGPoint, on mapView: MKMapView) {
+            let selected = mapView.convert(point, toCoordinateFrom: mapView)
+            // Đặt ghim ngay khi chạm, không phụ thuộc vào lệnh mô phỏng GPS.
+            mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
+            let pin = MKPointAnnotation()
+            pin.coordinate = selected
+            mapView.addAnnotation(pin)
+            parent.tappedCoordinate = EquatableCoordinate(coordinate: selected)
         }
     }
 }
