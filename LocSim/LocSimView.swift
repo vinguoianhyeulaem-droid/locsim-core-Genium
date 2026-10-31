@@ -4,13 +4,13 @@ import CoreLocation
 
 struct LocSimView: View {
     @State private var coordinates = ""
-    @State private var altitude = "0"
     @State private var tappedCoordinate: EquatableCoordinate?
     @State private var mapTarget: EquatableCoordinate?
     @State private var isSimulating = false
     @State private var showError = false
     @StateObject private var bookmarks = BookmarkStore()
-    @State private var showBookmarks = false
+    @State private var showBookmarkMenu = false
+    @State private var bookmarkQuery = ""
     @State private var showSavePlace = false
     @State private var showMissingCoordinate = false
     @State private var showDisclaimer = false
@@ -33,6 +33,23 @@ struct LocSimView: View {
                     Spacer()
                     controlCard
                 }
+
+                if showBookmarkMenu {
+                    // Chạm ra ngoài để đóng
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { closeBookmarkMenu() }
+                    VStack {
+                        HStack {
+                            Spacer()
+                            bookmarkPanel
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        Spacer()
+                    }
+                    .transition(.scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
+                }
             }
             .navigationTitle("TNG Location")
             .navigationBarTitleDisplayMode(.inline)
@@ -47,6 +64,15 @@ struct LocSimView: View {
                     } label: {
                         Image(systemName: "line.3.horizontal")
                             .accessibilityLabel("Menu")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismissKeyboard()
+                        withAnimation(.easeOut(duration: 0.18)) { showBookmarkMenu.toggle() }
+                    } label: {
+                        Image(systemName: showBookmarkMenu ? "bookmark.fill" : "bookmark")
+                            .accessibilityLabel("Địa chỉ đã lưu")
                     }
                 }
                 ToolbarItemGroup(placement: .keyboard) {
@@ -67,13 +93,10 @@ struct LocSimView: View {
                 coordinates = String(format: "%.7f,%.7f", point.latitude, point.longitude)
                 simulate(point)
             }
-            .sheet(isPresented: $showBookmarks) {
-                SavedPlacesView(store: bookmarks, select: selectSavedPlace)
-            }
             .sheet(isPresented: $showSavePlace) {
                 if let point = parsedCoordinates() {
-                    SavePlaceSheet(coordinate: point, altitude: Double(altitude) ?? 0) { name, savedPoint, savedAltitude in
-                        bookmarks.add(name: name, coordinate: savedPoint, altitude: savedAltitude)
+                    SavePlaceSheet(coordinate: point) { name, savedPoint in
+                        bookmarks.add(name: name, coordinate: savedPoint, altitude: 0)
                     }
                 }
             }
@@ -136,21 +159,6 @@ struct LocSimView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
             }
 
-            // Độ cao
-            HStack(spacing: 10) {
-                Image(systemName: "mountain.2")
-                    .foregroundColor(.secondary)
-                Text("Độ cao (m)")
-                Spacer()
-                TextField("0", text: $altitude)
-                    .keyboardType(.numbersAndPunctuation)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 80)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
-
             // Nút chính + nút dừng
             HStack(spacing: 10) {
                 Button(action: applyCoordinates) {
@@ -173,21 +181,6 @@ struct LocSimView: View {
                 .accessibilityLabel("Dừng GPS")
             }
 
-            // Lưu / Đã lưu
-            HStack(spacing: 10) {
-                Button {
-                    if parsedCoordinates() == nil { showMissingCoordinate = true }
-                    else { showSavePlace = true }
-                } label: {
-                    Label("Lưu vị trí", systemImage: "bookmark.badge.plus")
-                        .frame(maxWidth: .infinity)
-                }
-                Button { showBookmarks = true } label: {
-                    Label("Đã lưu", systemImage: "bookmark.fill")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.bordered)
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -199,6 +192,110 @@ struct LocSimView: View {
                 .padding(.bottom, -40) // giấu hai góc bo phía dưới
                 .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    private var filteredPlaces: [SavedPlace] {
+        let keyword = bookmarkQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sorted = bookmarks.places.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+        guard !keyword.isEmpty else { return sorted }
+        return sorted.filter { $0.name.localizedStandardContains(keyword) ||
+            $0.coordinateText.localizedStandardContains(keyword) }
+    }
+
+    private var bookmarkPanel: some View {
+        VStack(spacing: 0) {
+            // Dòng thêm địa chỉ
+            Button {
+                closeBookmarkMenu()
+                if parsedCoordinates() == nil { showMissingCoordinate = true }
+                else { showSavePlace = true }
+            } label: {
+                Label("Thêm địa chỉ", systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+
+            // Thanh tìm kiếm
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField("Tìm theo tên hoặc tọa độ", text: $bookmarkQuery)
+                    .font(.subheadline)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                if !bookmarkQuery.isEmpty {
+                    Button { bookmarkQuery = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Xóa nội dung tìm kiếm")
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
+            .padding(10)
+
+            Divider()
+
+            // Danh sách địa chỉ đã lưu
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if filteredPlaces.isEmpty {
+                        Text(bookmarks.places.isEmpty ? "Chưa có địa chỉ nào được lưu." : "Không tìm thấy địa chỉ.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                    }
+                    ForEach(filteredPlaces) { place in
+                        HStack(spacing: 8) {
+                            Button {
+                                selectSavedPlace(place)
+                                closeBookmarkMenu()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(place.name).font(.subheadline.weight(.semibold))
+                                    Text(place.coordinateText).font(.caption).foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            Button(role: .destructive) { bookmarks.remove(place.id) } label: {
+                                Image(systemName: "trash").foregroundColor(.red)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Xóa \(place.name)")
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        Divider().padding(.leading, 14)
+                    }
+                }
+            }
+            .frame(maxHeight: 260)
+        }
+        .frame(width: 300)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.2), radius: 12, y: 4)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func closeBookmarkMenu() {
+        dismissKeyboard()
+        withAnimation(.easeOut(duration: 0.18)) { showBookmarkMenu = false }
+        bookmarkQuery = ""
     }
 
     private func dismissKeyboard() {
@@ -218,7 +315,6 @@ struct LocSimView: View {
 
     private func selectSavedPlace(_ place: SavedPlace) {
         coordinates = place.coordinateText
-        altitude = String(format: "%g", place.altitude)
         mapTarget = EquatableCoordinate(coordinate: place.coordinate)
         // One tap on a bookmark selects the location AND starts simulation.
         // Preserve map behavior: targetCoordinate only changes for saved coordinates.
@@ -241,8 +337,7 @@ struct LocSimView: View {
     }
 
     private func simulate(_ coordinate: CLLocationCoordinate2D) {
-        let height = Double(altitude) ?? 0
-        let location = CLLocation(coordinate: coordinate, altitude: height,
+        let location = CLLocation(coordinate: coordinate, altitude: 0,
                                   horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date())
         LocSimManager.startLocSim(location: location)
         isSimulating = true
