@@ -15,25 +15,35 @@ struct LocSimView: View {
     @State private var showMissingCoordinate = false
     @State private var showDisclaimer = false
     @State private var activeText = ""
+    @State private var showCoordinateBar = false
+    @FocusState private var coordFocused: Bool
 
     var body: some View {
         NavigationView {
             ZStack {
-                // Bản đồ chiếm toàn màn hình, các điều khiển nổi phía trên.
+                // Bản đồ chiếm toàn màn hình.
                 CustomMapView(tappedCoordinate: $tappedCoordinate, targetCoordinate: $mapTarget)
                     .ignoresSafeArea(edges: .bottom)
 
-                VStack(spacing: 0) {
-                    HStack {
-                        statusChip
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
+                // Công tắc giả lập nổi ở dưới cùng
+                VStack {
                     Spacer()
-                    controlCard
+                    simulationPill
+                        .padding(.bottom, 16)
                 }
 
+                // Thanh nhập tọa độ (mở bằng biểu tượng kính lúp)
+                if showCoordinateBar {
+                    VStack {
+                        coordinateBar
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
+                        Spacer()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                // Bảng địa chỉ đã lưu (mở bằng biểu tượng bookmark)
                 if showBookmarkMenu {
                     // Chạm ra ngoài để đóng
                     Color.clear
@@ -54,7 +64,7 @@ struct LocSimView: View {
             .navigationTitle("TNG Location")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
                     Menu {
                         Button {
                             showDisclaimer = true
@@ -65,10 +75,17 @@ struct LocSimView: View {
                         Image(systemName: "line.3.horizontal")
                             .accessibilityLabel("Menu")
                     }
+                    Button {
+                        toggleCoordinateBar()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .accessibilityLabel("Nhập tọa độ")
+                    }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         dismissKeyboard()
+                        if showCoordinateBar { closeCoordinateBar() }
                         withAnimation(.easeOut(duration: 0.18)) { showBookmarkMenu.toggle() }
                     } label: {
                         Image(systemName: showBookmarkMenu ? "bookmark.fill" : "bookmark")
@@ -115,83 +132,99 @@ struct LocSimView: View {
 
     // MARK: - Thành phần giao diện
 
-    private var statusChip: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(isSimulating ? Color.green : Color.red)
-                .frame(width: 10, height: 10)
-            Text(isSimulating ? "Đang giả lập" : "Đã dừng")
-                .font(.subheadline.weight(.semibold))
-            if isSimulating, !activeText.isEmpty {
-                Text(activeText)
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.secondary)
+    /// Thanh nhập tọa độ: ô nhập + nút dán + nút Go.
+    private var coordinateBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "mappin.and.ellipse")
+                .foregroundColor(.accentColor)
+            TextField("21.5595306,105.2776417", text: $coordinates)
+                .keyboardType(.numbersAndPunctuation)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .submitLabel(.go)
+                .focused($coordFocused)
+                .onSubmit { goToCoordinates() }
+                .accessibilityLabel("Tọa độ vĩ độ, kinh độ")
+            Button(action: { coordinates = UIPasteboard.general.string ?? "" }) {
+                Image(systemName: "doc.on.clipboard")
             }
+            .accessibilityLabel("Dán tọa độ")
+            Button(action: goToCoordinates) {
+                Text("Go").font(.subheadline.weight(.bold))
+                    .padding(.horizontal, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .background(Capsule().fill(.regularMaterial))
-        .shadow(color: Color.black.opacity(0.12), radius: 6, y: 2)
-        .accessibilityElement(children: .combine)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.18), radius: 8, y: 3)
+        )
     }
 
-    private var controlCard: some View {
-        VStack(spacing: 12) {
-            // Ô nhập tọa độ
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Tọa độ Google Maps (vĩ độ, kinh độ)")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                HStack(spacing: 10) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .foregroundColor(.accentColor)
-                    TextField("21.5595306,105.2776417", text: $coordinates)
-                        .keyboardType(.numbersAndPunctuation)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                        .accessibilityLabel("Tọa độ")
-                    Button(action: { coordinates = UIPasteboard.general.string ?? "" }) {
-                        Image(systemName: "doc.on.clipboard")
-                    }
-                    .accessibilityLabel("Dán tọa độ")
+    /// Viên thuốc nổi ở dưới bản đồ: trạng thái + công tắc xanh (bật) / đỏ (tắt).
+    private var simulationPill: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isSimulating ? "Đang giả lập" : "Đã dừng")
+                    .font(.subheadline.weight(.semibold))
+                if isSimulating, !activeText.isEmpty {
+                    Text(activeText)
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
             }
-
-            // Nút chính + nút dừng
-            HStack(spacing: 10) {
-                Button(action: applyCoordinates) {
-                    Label(isSimulating ? "Cập nhật vị trí" : "Bắt đầu giả lập",
-                          systemImage: isSimulating ? "location.fill" : "location")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                Button(role: .destructive, action: stopSimulation) {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 24)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .tint(.red)
-                .disabled(!isSimulating)
-                .accessibilityLabel("Dừng GPS")
-            }
-
+            GPSSwitch(isOn: simulationBinding)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
+        .padding(.leading, 18)
+        .padding(.trailing, 10)
+        .padding(.vertical, 9)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(color: Color.black.opacity(0.15), radius: 10, y: -2)
-                .padding(.bottom, -40) // giấu hai góc bo phía dưới
-                .ignoresSafeArea(edges: .bottom)
+            Capsule().fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.18), radius: 8, y: 3)
         )
+    }
+
+    /// Bật: giả lập tại tọa độ đang có (chưa có thì mở ô nhập). Tắt: dừng GPS.
+    private var simulationBinding: Binding<Bool> {
+        Binding(
+            get: { isSimulating },
+            set: { turnOn in
+                if turnOn {
+                    if parsedCoordinates() == nil {
+                        openCoordinateBar()
+                    } else {
+                        applyCoordinates()
+                    }
+                } else {
+                    stopSimulation()
+                }
+            }
+        )
+    }
+
+    private func goToCoordinates() {
+        if applyCoordinates() { closeCoordinateBar() }
+    }
+
+    private func toggleCoordinateBar() {
+        if showCoordinateBar { closeCoordinateBar() } else { openCoordinateBar() }
+    }
+
+    private func openCoordinateBar() {
+        if showBookmarkMenu { closeBookmarkMenu() }
+        withAnimation(.easeOut(duration: 0.18)) { showCoordinateBar = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { coordFocused = true }
+    }
+
+    private func closeCoordinateBar() {
+        coordFocused = false
+        dismissKeyboard()
+        withAnimation(.easeOut(duration: 0.18)) { showCoordinateBar = false }
     }
 
     private var filteredPlaces: [SavedPlace] {
@@ -321,7 +354,8 @@ struct LocSimView: View {
         simulate(place.coordinate)
     }
 
-    private func applyCoordinates() {
+    @discardableResult
+    private func applyCoordinates() -> Bool {
         let parts = coordinates.split(separator: ",", omittingEmptySubsequences: false)
         guard parts.count == 2,
               let latitude = Double(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -329,11 +363,12 @@ struct LocSimView: View {
               latitude.isFinite, longitude.isFinite,
               (-90.0...90.0).contains(latitude), (-180.0...180.0).contains(longitude) else {
             showError = true
-            return
+            return false
         }
         let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
         mapTarget = EquatableCoordinate(coordinate: coordinate)
         simulate(coordinate)
+        return true
     }
 
     private func simulate(_ coordinate: CLLocationCoordinate2D) {
@@ -351,6 +386,31 @@ struct LocSimView: View {
     }
 }
 
+
+/// Công tắc gạt: bật = xanh, tắt = đỏ.
+private struct GPSSwitch: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            isOn.toggle()
+        } label: {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Capsule().fill(isOn ? Color.green : Color.red)
+                Circle()
+                    .fill(Color.white)
+                    .padding(3)
+                    .shadow(color: Color.black.opacity(0.25), radius: 1.5, y: 1)
+            }
+            .frame(width: 64, height: 34)
+            .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isOn)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Giả lập GPS")
+        .accessibilityValue(isOn ? "Bật" : "Tắt")
+    }
+}
 
 private struct DisclaimerView: View {
     @Environment(\.dismiss) private var dismiss
