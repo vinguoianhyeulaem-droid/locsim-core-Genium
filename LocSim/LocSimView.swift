@@ -15,6 +15,7 @@ struct LocSimView: View {
     @State private var showMissingCoordinate = false
     @State private var showDisclaimer = false
     @State private var activeText = ""
+    @State private var activeCoordinate: CLLocationCoordinate2D?
     @State private var showCoordinateBar = false
     @FocusState private var coordFocused: Bool
 
@@ -106,12 +107,10 @@ struct LocSimView: View {
                 // for the input and the simulated GPS, so the map pin and GPS agree.
                 // Do not update mapTarget: that would move the camera after a manual tap
                 // and can also trigger a zoom/camera jump in updateUIView.
-                let point = selected.coordinate
-                coordinates = String(format: "%.7f,%.7f", point.latitude, point.longitude)
-                simulate(point)
+                simulate(selected.coordinate)
             }
             .sheet(isPresented: $showSavePlace) {
-                if let point = parsedCoordinates() {
+                if let point = activeCoordinate {
                     SavePlaceSheet(coordinate: point) { name, savedPoint in
                         bookmarks.add(name: name, coordinate: savedPoint, altitude: 0)
                     }
@@ -120,7 +119,7 @@ struct LocSimView: View {
             .alert("Chưa có tọa độ hợp lệ", isPresented: $showMissingCoordinate) {
                 Button("Đóng", role: .cancel) {}
             } message: {
-                Text("Hãy chọn điểm trên bản đồ hoặc nhập tọa độ trước khi lưu.")
+                Text("Hãy chọn điểm trên bản đồ hoặc nhập tọa độ trước khi thêm địa chỉ.")
             }
             .alert("Tọa độ không hợp lệ", isPresented: $showError) {
                 Button("Đóng", role: .cancel) {}
@@ -195,10 +194,12 @@ struct LocSimView: View {
             get: { isSimulating },
             set: { turnOn in
                 if turnOn {
-                    if parsedCoordinates() == nil {
-                        openCoordinateBar()
-                    } else {
+                    if parsedCoordinates() != nil {
                         applyCoordinates()
+                    } else if let last = activeCoordinate {
+                        simulate(last)
+                    } else {
+                        openCoordinateBar()
                     }
                 } else {
                     stopSimulation()
@@ -222,6 +223,7 @@ struct LocSimView: View {
     }
 
     private func closeCoordinateBar() {
+        coordinates = ""
         coordFocused = false
         dismissKeyboard()
         withAnimation(.easeOut(duration: 0.18)) { showCoordinateBar = false }
@@ -242,7 +244,7 @@ struct LocSimView: View {
             // Dòng thêm địa chỉ
             Button {
                 closeBookmarkMenu()
-                if parsedCoordinates() == nil { showMissingCoordinate = true }
+                if activeCoordinate == nil { showMissingCoordinate = true }
                 else { showSavePlace = true }
             } label: {
                 Label("Thêm địa chỉ", systemImage: "plus.circle.fill")
@@ -347,7 +349,7 @@ struct LocSimView: View {
     }
 
     private func selectSavedPlace(_ place: SavedPlace) {
-        coordinates = place.coordinateText
+        coordinates = ""
         mapTarget = EquatableCoordinate(coordinate: place.coordinate)
         // One tap on a bookmark selects the location AND starts simulation.
         // Preserve map behavior: targetCoordinate only changes for saved coordinates.
@@ -368,6 +370,7 @@ struct LocSimView: View {
         let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
         mapTarget = EquatableCoordinate(coordinate: coordinate)
         simulate(coordinate)
+        coordinates = ""   // dùng xong thì làm trống ô nhập
         return true
     }
 
@@ -376,6 +379,7 @@ struct LocSimView: View {
                                   horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date())
         LocSimManager.startLocSim(location: location)
         isSimulating = true
+        activeCoordinate = coordinate
         activeText = String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
     }
 
