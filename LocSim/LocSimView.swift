@@ -14,67 +14,28 @@ struct LocSimView: View {
     @State private var showSavePlace = false
     @State private var showMissingCoordinate = false
     @State private var showDisclaimer = false
+    @State private var activeText = ""
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Tọa độ Google Maps (vĩ độ, kinh độ)").font(.headline)
-                    HStack {
-                        TextField("21.5595306,105.2776417", text: $coordinates)
-                            .keyboardType(.numbersAndPunctuation)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .accessibilityLabel("Tọa độ")
-                        Button(action: { coordinates = UIPasteboard.general.string ?? "" }) {
-                            Image(systemName: "doc.on.clipboard")
-                        }
-                    }
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    HStack {
-                        Text("Độ cao (m)")
-                        Spacer()
-                        TextField("0", text: $altitude)
-                            .keyboardType(.numbersAndPunctuation)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 85)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                    }
-                    Button(action: applyCoordinates) {
-                        Label(isSimulating ? "Đang chạy" : "Đã dừng", systemImage: isSimulating ? "location.fill" : "location.slash")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(isSimulating ? .green : .red)
-                    .controlSize(.large)
-                    HStack(spacing: 12) {
-                        Button {
-                            if parsedCoordinates() == nil { showMissingCoordinate = true }
-                            else { showSavePlace = true }
-                        } label: {
-                            Label("Lưu vị trí", systemImage: "bookmark.badge.plus")
-                        }
-                        Button { showBookmarks = true } label: {
-                            Label("Đã lưu", systemImage: "bookmark.fill")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
-                }.padding(.horizontal)
+            ZStack {
+                // Bản đồ chiếm toàn màn hình, các điều khiển nổi phía trên.
                 CustomMapView(tappedCoordinate: $tappedCoordinate, targetCoordinate: $mapTarget)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 12)
-                HStack {
-                    Text("Version 1.2.0")
-                        .foregroundColor(.secondary)
+                    .ignoresSafeArea(edges: .bottom)
+
+                VStack(spacing: 0) {
+                    HStack {
+                        statusChip
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
                     Spacer()
-                    Button(role: .destructive, action: stopSimulation) {
-                        Label("Dừng GPS", systemImage: "location.slash")
-                    }.buttonStyle(.bordered)
-                }.padding([.horizontal, .bottom])
+                    controlCard
+                }
             }
-            .padding(.top, 10)
             .navigationTitle("TNG Location")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
@@ -88,11 +49,14 @@ struct LocSimView: View {
                             .accessibilityLabel("Menu")
                     }
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Xong") { dismissKeyboard() }
+                }
             }
             .sheet(isPresented: $showDisclaimer) {
                 DisclaimerView()
             }
-            .navigationBarTitleDisplayMode(.inline)
             .onChange(of: tappedCoordinate) { selected in
                 guard let selected = selected else { return }
                 // MKMapView provides CLLocationCoordinate2D. Use this exact coordinate
@@ -124,6 +88,122 @@ struct LocSimView: View {
                 Text("Nhập theo dạng vĩ độ,kinh độ. Ví dụ: 21.5595306,105.2776417")
             }
         }.navigationViewStyle(.stack)
+    }
+
+    // MARK: - Thành phần giao diện
+
+    private var statusChip: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(isSimulating ? Color.green : Color.red)
+                .frame(width: 10, height: 10)
+            Text(isSimulating ? "Đang giả lập" : "Đã dừng")
+                .font(.subheadline.weight(.semibold))
+            if isSimulating, !activeText.isEmpty {
+                Text(activeText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(.regularMaterial))
+        .shadow(color: Color.black.opacity(0.12), radius: 6, y: 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var controlCard: some View {
+        VStack(spacing: 12) {
+            // Ô nhập tọa độ
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Tọa độ Google Maps (vĩ độ, kinh độ)")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                HStack(spacing: 10) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .foregroundColor(.accentColor)
+                    TextField("21.5595306,105.2776417", text: $coordinates)
+                        .keyboardType(.numbersAndPunctuation)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .accessibilityLabel("Tọa độ")
+                    Button(action: { coordinates = UIPasteboard.general.string ?? "" }) {
+                        Image(systemName: "doc.on.clipboard")
+                    }
+                    .accessibilityLabel("Dán tọa độ")
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+            }
+
+            // Độ cao
+            HStack(spacing: 10) {
+                Image(systemName: "mountain.2")
+                    .foregroundColor(.secondary)
+                Text("Độ cao (m)")
+                Spacer()
+                TextField("0", text: $altitude)
+                    .keyboardType(.numbersAndPunctuation)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 80)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+
+            // Nút chính + nút dừng
+            HStack(spacing: 10) {
+                Button(action: applyCoordinates) {
+                    Label(isSimulating ? "Cập nhật vị trí" : "Bắt đầu giả lập",
+                          systemImage: isSimulating ? "location.fill" : "location")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button(role: .destructive, action: stopSimulation) {
+                    Image(systemName: "stop.fill")
+                        .frame(width: 24)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .tint(.red)
+                .disabled(!isSimulating)
+                .accessibilityLabel("Dừng GPS")
+            }
+
+            // Lưu / Đã lưu
+            HStack(spacing: 10) {
+                Button {
+                    if parsedCoordinates() == nil { showMissingCoordinate = true }
+                    else { showSavePlace = true }
+                } label: {
+                    Label("Lưu vị trí", systemImage: "bookmark.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                Button { showBookmarks = true } label: {
+                    Label("Đã lưu", systemImage: "bookmark.fill")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, y: -2)
+                .padding(.bottom, -40) // giấu hai góc bo phía dưới
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
     }
 
     private func parsedCoordinates() -> CLLocationCoordinate2D? {
@@ -166,11 +246,13 @@ struct LocSimView: View {
                                   horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date())
         LocSimManager.startLocSim(location: location)
         isSimulating = true
+        activeText = String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
     }
 
     private func stopSimulation() {
         LocSimManager.stopLocSim()
         isSimulating = false
+        activeText = ""
     }
 }
 

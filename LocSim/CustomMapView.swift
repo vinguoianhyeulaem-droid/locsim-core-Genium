@@ -16,8 +16,7 @@ struct CustomMapView: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = true
-        mapView.layer.cornerRadius = 15
-        mapView.layer.masksToBounds = true
+        mapView.showsCompass = true
 
         let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         mapView.addGestureRecognizer(tapRecognizer)
